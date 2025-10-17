@@ -410,3 +410,4 @@ appsettings.json
 output/
 exports/
 Plan/
+SharePointPermissions.*
