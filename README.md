@@ -1,6 +1,6 @@
 # SharePoint Permissions Exporter
 
-A .NET 8 console application that retrieves and exports file-level permissions from SharePoint Document Libraries to CSV format using the Microsoft Graph API.
+A .NET 8 console application that retrieves and exports file-level permissions from SharePoint Document Libraries to CSV or JSON format using the Microsoft Graph API.
 
 ## Overview
 
@@ -13,8 +13,9 @@ This application provides a comprehensive solution for auditing and exporting Sh
 - **Batch Processing**: Efficiently handles large libraries using Microsoft Graph batch requests (20 requests per batch)
 - **Retry Logic**: Automatic retry with exponential backoff for handling API throttling and transient errors
 - **Progress Tracking**: Real-time console output showing processing progress
+- **Multiple Export Formats**: Choose between CSV (flat structure) or JSON (hierarchical structure) export formats
 - **Detailed Export**: Exports comprehensive permission data including roles, users/groups, and inheritance information
-- **Configurable**: Flexible configuration options for batch size, delays, and retry behavior
+- **Configurable**: Flexible configuration options for batch size, delays, retry behavior, and export format
 
 ## Prerequisites
 
@@ -97,6 +98,7 @@ The application uses the [`appsettings.json`](appsettings.json:1) file for confi
   },
   "Export": {
     "OutputFileName": "SharePointPermissions.csv",
+    "ExportFormat": "CSV",
     "DelayBetweenRequestsMs": 100,
     "BatchSize": 20,
     "MaxRetryAttempts": 3
@@ -125,7 +127,8 @@ The application uses the [`appsettings.json`](appsettings.json:1) file for confi
 
 | Setting | Required | Default | Description |
 |---------|----------|---------|-------------|
-| `OutputFileName` | No | `SharePointPermissions.csv` | Name of the output CSV file |
+| `OutputFileName` | No | `SharePointPermissions.csv` | Name of the output file. Extension should match the format (`.csv` or `.json`) |
+| `ExportFormat` | No | `CSV` | Export format: `CSV` for flat structure or `JSON` for hierarchical structure |
 | `DelayBetweenRequestsMs` | No | `100` | Delay in milliseconds between API requests (helps avoid throttling) |
 | `BatchSize` | No | `20` | Number of requests per batch (Graph API supports up to 20) |
 | `MaxRetryAttempts` | No | `3` | Maximum number of retry attempts for failed requests |
@@ -145,6 +148,7 @@ The application uses the [`appsettings.json`](appsettings.json:1) file for confi
   },
   "Export": {
     "OutputFileName": "FinancePermissions.csv",
+    "ExportFormat": "CSV",
     "DelayBetweenRequestsMs": 150,
     "BatchSize": 20,
     "MaxRetryAttempts": 5
@@ -263,7 +267,39 @@ The CSV file will be created in the same directory as the application executable
 - When running with `dotnet run`: Project root directory
 - When running compiled executable: Same directory as the `.exe` file
 
-## Output Format
+## Export Formats
+
+The application supports two export formats: **CSV** and **JSON**. You can choose the format by setting the `ExportFormat` option in [`appsettings.json`](appsettings.json:1).
+
+### Switching Between Formats
+
+To change the export format, update the `ExportFormat` setting in the `Export` section:
+
+**For CSV Export:**
+```json
+{
+  "Export": {
+    "OutputFileName": "SharePointPermissions.csv",
+    "ExportFormat": "CSV"
+  }
+}
+```
+
+**For JSON Export:**
+```json
+{
+  "Export": {
+    "OutputFileName": "SharePointPermissions.json",
+    "ExportFormat": "JSON"
+  }
+}
+```
+
+### CSV Format
+
+The CSV format provides a flat, tabular structure ideal for analysis in spreadsheet applications and data processing tools.
+
+#### CSV Output Structure
 
 The exported CSV file contains the following columns:
 
@@ -299,6 +335,87 @@ Budget-2024.xlsx,https://contoso.sharepoint.com/...,01ABC123,perm1,"read, write"
 Budget-2024.xlsx,https://contoso.sharepoint.com/...,01ABC123,perm2,read,John Doe,john.doe@contoso.com,True,/sites/Finance/Shared Documents
 Report.docx,https://contoso.sharepoint.com/...,01XYZ789,perm3,owner,Jane Smith,jane.smith@contoso.com,False,
 ```
+
+### JSON Format
+
+The JSON format provides a hierarchical structure that groups permissions by file, making it ideal for programmatic processing and integration with other systems.
+
+#### JSON Output Structure
+
+The exported JSON file contains an array of file objects, where each file includes its metadata and a nested array of permissions:
+
+```json
+[
+  {
+    "fileName": "Document1.docx",
+    "webUrl": "https://tenant.sharepoint.com/sites/site/Shared Documents/Document1.docx",
+    "fileId": "01ABCDEF123456789",
+    "permissions": [
+      {
+        "permissionId": "perm1",
+        "roles": ["read", "write"],
+        "grantedToDisplayName": "John Doe",
+        "grantedToEmail": "john.doe@company.com",
+        "isInherited": false,
+        "inheritedFrom": null
+      },
+      {
+        "permissionId": "perm2",
+        "roles": ["read"],
+        "grantedToDisplayName": "Finance Team",
+        "grantedToEmail": "finance@company.com",
+        "isInherited": true,
+        "inheritedFrom": "/sites/site/Shared Documents"
+      }
+    ]
+  },
+  {
+    "fileName": "Report.xlsx",
+    "webUrl": "https://tenant.sharepoint.com/sites/site/Shared Documents/Report.xlsx",
+    "fileId": "01XYZ789",
+    "permissions": [
+      {
+        "permissionId": "perm3",
+        "roles": ["owner"],
+        "grantedToDisplayName": "Jane Smith",
+        "grantedToEmail": "jane.smith@company.com",
+        "isInherited": false,
+        "inheritedFrom": null
+      }
+    ]
+  }
+]
+```
+
+#### JSON Field Descriptions
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `fileName` | string | Name of the file |
+| `webUrl` | string | Full URL to access the file in SharePoint |
+| `fileId` | string | Unique identifier for the file |
+| `permissions` | array | Array of permission objects for this file |
+| `permissionId` | string | Unique identifier for the permission |
+| `roles` | array | Array of permission role strings (e.g., `["read", "write"]`) |
+| `grantedToDisplayName` | string | Display name of the user or group |
+| `grantedToEmail` | string | Email address (if available, otherwise empty string) |
+| `isInherited` | boolean | Whether the permission is inherited from a parent folder |
+| `inheritedFrom` | string/null | Path from which permission is inherited, or `null` if not inherited |
+
+#### JSON Format Features
+
+- **Hierarchical Structure**: Each file appears once with all its permissions nested within
+- **camelCase Naming**: All property names use camelCase convention (e.g., `fileName`, `permissionId`)
+- **Pretty-Printed**: The output is formatted with indentation for human readability
+- **Base64 Support**: The JSON exporter automatically handles base64-encoded values in permission IDs
+- **Type Safety**: Boolean and null values are properly typed (not strings)
+
+#### Advantages of JSON Format
+
+- **Easier Parsing**: Hierarchical structure matches the logical relationship between files and permissions
+- **Programming-Friendly**: Native data structure for JavaScript/TypeScript and easy to parse in other languages
+- **Less Redundancy**: File information is not repeated for each permission
+- **Type Preservation**: Maintains proper data types (booleans, null, arrays) unlike CSV
 
 ## Troubleshooting
 
@@ -372,6 +489,7 @@ The application is structured with a clean separation of concerns:
 - **[`AuthenticationService.cs`](Services/AuthenticationService.cs:1)**: Manages Azure AD authentication and Graph client creation
 - **[`SharePointPermissionsService.cs`](Services/SharePointPermissionsService.cs:1)**: Handles all SharePoint and Microsoft Graph API interactions
 - **[`CsvExportService.cs`](Services/CsvExportService.cs:1)**: Manages CSV file generation using CsvHelper library
+- **[`JsonExportService.cs`](Services/JsonExportService.cs:1)**: Manages JSON file generation with hierarchical structure
 - **[`FilePermissionInfo.cs`](Models/FilePermissionInfo.cs:1)**: Data model representing file permission information
 
 ### Batch Processing
